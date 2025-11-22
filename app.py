@@ -14,6 +14,16 @@ env_api_key = os.getenv("GOOGLE_API_KEY")
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AutoStudy AI", page_icon="🧠", layout="wide")
 
+# --- HIDE STREAMLIT STYLE ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            header {visibility: hidden;}
+            footer {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
 # --- CSS STYLING ---
 st.markdown("""
 <style>
