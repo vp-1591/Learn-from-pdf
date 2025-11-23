@@ -60,7 +60,6 @@ st.markdown("""
     }
 
     /* Floating Card Container Styling */
-    /* Target the vertical block wrapper that has a border */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: white;
         border-radius: 20px;
@@ -110,56 +109,69 @@ st.markdown("""
 
     /* --- DARK MODE SUPPORT --- */
     @media (prefers-color-scheme: dark) {
-        /* Global Background & Text */
         .stApp {
-            background-color: #0E1117; /* Streamlit default dark bg */
+            background-color: #0E1117;
             color: #FAFAFA;
         }
-        
         h1, h2, h3 {
-            color: #F0F2F6; /* Light grey for headers */
+            color: #F0F2F6;
         }
-
-        /* Hero Section */
         .hero-subtitle {
-            color: #BFC5D3; /* Lighter grey for subtitle */
+            color: #BFC5D3;
         }
-
-        /* Floating Card Container (Vertical Block) */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             background-color: #1F242C;
             border: 1px solid #384455;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3); /* Softer, darker shadow */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
-
-        /* Summary Cards */
         .summary-card {
             background-color: #1F242C;
             border: 1px solid #384455;
             color: #E0E0E0;
-            box-shadow: none; /* Remove shadow or make very subtle */
+            box-shadow: none;
         }
         .summary-card:hover {
             background-color: #262B33;
             box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
         .summary-number {
-            color: #818CF8; /* Lighter Indigo for dark mode */
+            color: #818CF8;
         }
-
-        /* Quiz Container */
         .quiz-container {
             background-color: #1F242C;
             border-left: 5px solid #818CF8;
             color: #E0E0E0;
             box-shadow: none;
         }
-
-        /* Flashcards (Streamlit Containers) */
-        /* Adjusting standard text colors if needed */
         p, li, span {
             color: #E0E0E0;
         }
+    }
+
+    /* --- MAGIC WAND BUTTON STYLING (ICON ONLY) --- */
+    /* Target buttons that contain the specific icon-only logic */
+    div.stButton > button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%; 
+        height: 100%;
+        min-height: 45px; /* Match input height roughly */
+        padding: 0;
+    }
+
+    /* Inject SVG icon using mask-image for currentColor support */
+    div.stButton > button::before {
+        content: "";
+        width: 24px;
+        height: 24px;
+        background-color: currentColor;
+        mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M15 4V2'/><path d='M15 16v-2'/><path d='M8 9h2'/><path d='M20 9h2'/><path d='M17.8 11.8L19 13'/><path d='M15 9l-1 1'/><path d='M17.8 6.2L19 5'/><path d='M3 21l9-9'/><path d='M12.2 6.2L11 5'/></svg>");
+        -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M15 4V2'/><path d='M15 16v-2'/><path d='M8 9h2'/><path d='M20 9h2'/><path d='M17.8 11.8L19 13'/><path d='M15 9l-1 1'/><path d='M17.8 6.2L19 5'/><path d='M3 21l9-9'/><path d='M12.2 6.2L11 5'/></svg>");
+        mask-size: contain;
+        -webkit-mask-size: contain;
+        mask-repeat: no-repeat;
+        -webkit-mask-repeat: no-repeat;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -181,32 +193,19 @@ def extract_video_id(url):
     return None
 
 def get_youtube_transcript(video_url):
-    """
-    Optimized for youtube-transcript-api v1.2.3
-    Uses Object Access (entry.text) instead of Dictionary Access (entry['text']).
-    """
     video_id = extract_video_id(video_url)
     if not video_id:
         return None
-        
     try:
-        # 1. Instantiate the Class
         ytt = YouTubeTranscriptApi()
-        
-        # 2. Fetch Transcript
-        # Tries manual English, then falls back to auto-generated
         transcript = ytt.fetch(video_id, languages=['en', 'en-US', 'en-GB'])
-        
-        # 3. Process Text
         text_list = []
         for entry in transcript:
             if hasattr(entry, 'text'):
                 text_list.append(entry.text)
             else:
                 text_list.append(entry.get('text', ''))
-                
         return " ".join(text_list)
-        
     except Exception as e:
         print(f"Error: {e}")
         return None
@@ -241,6 +240,47 @@ def generate_study_material(text_content, api_key):
         st.error(f"AI Error: {e}")
         return None
 
+def process_generation(content_source, source_type="text", status_container=None):
+    """
+    Handles the common generation logic.
+    source_type: 'text' or 'youtube'
+    """
+    # Use the passed container or fallback to main flow (though we expect a container)
+    msg_container = status_container if status_container else st
+
+    if not api_key:
+        msg_container.warning("API Key missing. Please enter it in the sidebar.")
+        return
+
+    text_to_process = ""
+    
+    # Execute spinner and messages within the container context
+    with msg_container:
+        with st.spinner("✨ Generating content..."):
+            if source_type == "youtube":
+                # 1. Fetch Transcript
+                transcript = get_youtube_transcript(content_source)
+                if transcript:
+                    text_to_process = transcript
+                    st.session_state['study_material'] = transcript # Save for reference
+                else:
+                    st.error("Could not extract transcript. Please check the URL.")
+                    return
+            else:
+                # Source is raw text
+                text_to_process = content_source
+                st.session_state['study_material'] = text_to_process
+
+            if not text_to_process:
+                st.warning("Please provide some text or a valid video URL.")
+                return
+
+            # 2. Generate Study Material
+            data = generate_study_material(text_to_process, api_key)
+            if data:
+                st.session_state['generated_data'] = data
+                st.rerun() # Rerun to display results
+
 # --- MAIN APP UI ---
 
 # Hero Section
@@ -250,28 +290,8 @@ st.markdown('<div class="hero-subtitle">Turn any video or text into flashcards &
 # --- SESSION STATE INITIALIZATION ---
 if 'study_material' not in st.session_state:
     st.session_state['study_material'] = ""
-if 'last_video_url' not in st.session_state:
-    st.session_state['last_video_url'] = None
-if 'last_study_material' not in st.session_state:
-    st.session_state['last_study_material'] = ""
 if 'generated_data' not in st.session_state:
     st.session_state['generated_data'] = None
-
-# --- AUTO-FETCH LOGIC (Run before widgets) ---
-# Check if video URL has changed
-current_video_url = st.session_state.get('video_url')
-if current_video_url != st.session_state['last_video_url']:
-    if current_video_url:
-        with st.spinner("🎧 Listening to video and extracting transcript..."):
-            transcript_text = get_youtube_transcript(current_video_url)
-            if transcript_text:
-                st.session_state['study_material'] = transcript_text
-                st.success("Transcript loaded successfully!")
-            else:
-                st.error("Could not extract text. (Note: This tool requires videos with captions enabled)")
-    
-    # Update last_video_url to prevent re-fetching
-    st.session_state['last_video_url'] = current_video_url
 
 # --- WIDGETS ---
 # Centered Card Container for Inputs
@@ -281,33 +301,52 @@ with col2:
     with st.container(border=True):
         tab1, tab2 = st.tabs(["📚 Text Input", "🎥 YouTube Video"])
 
+        # Create a container for status messages AT THE BOTTOM of the main container
+        # This ensures messages appear below inputs/buttons but inside the card
+        status_container = st.container()
+
+        # TAB 1: Text Input
         with tab1:
-            st.text_area(
-                "Paste notes or article text:", 
-                height=200, 
-                placeholder="Paste your study material here...",
-                key="study_material"
-            )
-
-        with tab2:
-            st.text_input("Paste YouTube URL:", placeholder="https://www.youtube.com/watch?v=...", key="video_url")
-            if st.session_state.get("video_url"):
-                st.video(st.session_state["video_url"])
-
-# --- AUTO-GENERATE LOGIC ---
-# Check if study material has changed (either from transcript fetch or manual edit)
-current_study_material = st.session_state.get('study_material')
-if current_study_material and current_study_material != st.session_state['last_study_material']:
-    if not api_key:
-        st.warning("API Key missing. Please enter it in the sidebar.")
-    else:
-        with st.spinner("✨ Curating your study materials..."):
-            data = generate_study_material(current_study_material, api_key)
-            if data:
-                st.session_state['generated_data'] = data
+            st.markdown("Paste your notes or article text below:")
+            # Use columns for inline button
+            t1_col1, t1_col2 = st.columns([10, 1])
             
-    # Update last_study_material to prevent re-generating
-    st.session_state['last_study_material'] = current_study_material
+            with t1_col1:
+                text_input_val = st.text_area(
+                    "Text Input",
+                    height=150, 
+                    placeholder="Paste your study material here...",
+                    key="text_input_area",
+                    label_visibility="collapsed"
+                )
+            
+            with t1_col2:
+                # Spacer to align button with text area (roughly)
+                st.markdown("<div style='height: 50px'></div>", unsafe_allow_html=True)
+                if st.button(" ", key="btn_text_gen", type="primary", use_container_width=True):
+                    process_generation(text_input_val, source_type="text", status_container=status_container)
+
+        # TAB 2: YouTube Video
+        with tab2:
+            st.markdown("Paste a YouTube URL below:")
+            # Use columns for inline button
+            t2_col1, t2_col2 = st.columns([10, 1])
+            
+            with t2_col1:
+                video_url_val = st.text_input(
+                    "YouTube URL",
+                    placeholder="https://www.youtube.com/watch?v=...", 
+                    key="video_url_input",
+                    label_visibility="collapsed"
+                )
+            
+            with t2_col2:
+                # No spacer needed for text_input usually, but let's check alignment
+                if st.button(" ", key="btn_yt_gen", type="primary", use_container_width=True):
+                    process_generation(video_url_val, source_type="youtube", status_container=status_container)
+
+            if st.session_state.get("video_url_input"):
+                st.video(st.session_state["video_url_input"])
 
 # --- DISPLAY RESULTS ---
 data = st.session_state.get('generated_data')
