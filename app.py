@@ -107,6 +107,60 @@ st.markdown("""
         color: #4F46E5;
         font-weight: 600;
     }
+
+    /* --- DARK MODE SUPPORT --- */
+    @media (prefers-color-scheme: dark) {
+        /* Global Background & Text */
+        .stApp {
+            background-color: #0E1117; /* Streamlit default dark bg */
+            color: #FAFAFA;
+        }
+        
+        h1, h2, h3 {
+            color: #F0F2F6; /* Light grey for headers */
+        }
+
+        /* Hero Section */
+        .hero-subtitle {
+            color: #BFC5D3; /* Lighter grey for subtitle */
+        }
+
+        /* Floating Card Container (Vertical Block) */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: #1F242C;
+            border: 1px solid #384455;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3); /* Softer, darker shadow */
+        }
+
+        /* Summary Cards */
+        .summary-card {
+            background-color: #1F242C;
+            border: 1px solid #384455;
+            color: #E0E0E0;
+            box-shadow: none; /* Remove shadow or make very subtle */
+        }
+        .summary-card:hover {
+            background-color: #262B33;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .summary-number {
+            color: #818CF8; /* Lighter Indigo for dark mode */
+        }
+
+        /* Quiz Container */
+        .quiz-container {
+            background-color: #1F242C;
+            border-left: 5px solid #818CF8;
+            color: #E0E0E0;
+            box-shadow: none;
+        }
+
+        /* Flashcards (Streamlit Containers) */
+        /* Adjusting standard text colors if needed */
+        p, li, span {
+            color: #E0E0E0;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
