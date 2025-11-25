@@ -260,6 +260,9 @@ def get_gspread_client():
     try:
         # 1. Check Cloud/Secrets First
         try:
+            if 'gspread' in st.secrets:
+                return gspread.service_account_from_dict(st.secrets['gspread'])
+
             if "GSPREAD_AUTH" in st.secrets:
                 return gspread.service_account_from_dict(st.secrets["GSPREAD_AUTH"])
         except Exception:
@@ -270,7 +273,7 @@ def get_gspread_client():
             return gspread.service_account(filename=LOCAL_GSPREAD_KEY_FILE)
         
         else:
-            st.warning("Google Sheets authentication not found (Secrets or Local File). Feedback will not be saved.")
+            st.warning("Internal Error. Feedback will not be saved.")
             return None
     except Exception as e:
         st.error(f"Authentication Error: {e}")
