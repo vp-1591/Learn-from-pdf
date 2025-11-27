@@ -5,6 +5,7 @@ import json
 import os
 import gspread
 from datetime import datetime
+import asyncio
 from dotenv import load_dotenv
 
 # --- LOAD ENVIRONMENT VARIABLES ---
@@ -26,22 +27,17 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# --- CSS STYLING ---
+# --- CSS STYLING (STREAMLIT NATIVE THEMING) ---
+
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
-    /* Global Theme */
+    /* Global Font */
     .stApp {
-        background-color: #f4f6f8;
         font-family: 'Inter', sans-serif;
     }
-    
-    h1, h2, h3 {
-        color: #1e293b;
-        font-weight: 700;
-    }
-    
+
     /* Hero Section Styling */
     .hero-title {
         font-size: 3.5rem;
@@ -56,114 +52,23 @@ st.markdown("""
     .hero-subtitle {
         font-size: 1.2rem;
         text-align: center;
-        color: #64748b;
+        opacity: 0.7;
         margin-bottom: 2rem;
         font-weight: 400;
     }
 
-    /* Floating Card Container Styling */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: white;
-        border-radius: 20px;
-        border: 1px solid #e0e0e0;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
-        padding: 20px;
-    }
-
-    /* Index Card Styling for Summary */
-    .summary-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 15px;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        height: 100%;
-        border: 1px solid #e2e8f0;
-    }
-    .summary-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
-    }
-    .summary-number {
-        color: #4F46E5;
-        font-weight: 700;
-        font-size: 1.1em;
-        margin-bottom: 8px;
-        display: block;
-    }
-
-    /* Quiz Card Styling */
-    .quiz-container {
-        background-color: white;
-        padding: 20px;
-        border-radius: 12px;
-        border-left: 5px solid #6C63FF;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
-    }
-    
-    /* Spinner Text */
-    .stSpinner > div > div {
-        color: #4F46E5;
-        font-weight: 600;
-    }
-
-    /* --- DARK MODE SUPPORT --- */
-    @media (prefers-color-scheme: dark) {
-        .stApp {
-            background-color: #0E1117;
-            color: #FAFAFA;
-        }
-        h1, h2, h3 {
-            color: #F0F2F6;
-        }
-        .hero-subtitle {
-            color: #BFC5D3;
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"] {
-            background-color: #1F242C;
-            border: 1px solid #384455;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-        .summary-card {
-            background-color: #1F242C;
-            border: 1px solid #384455;
-            color: #E0E0E0;
-            box-shadow: none;
-        }
-        .summary-card:hover {
-            background-color: #262B33;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
-        .summary-number {
-            color: #818CF8;
-        }
-        .quiz-container {
-            background-color: #1F242C;
-            border-left: 5px solid #818CF8;
-            color: #E0E0E0;
-            box-shadow: none;
-        }
-        p, li, span {
-            color: #E0E0E0;
-        }
-    }
-
-    /* --- MAGIC WAND BUTTON STYLING (SPECIFIC TARGETING) --- */
-    /* Target buttons that contain the specific icon-only logic via aria-label */
+    /* Magic Wand Button Icon Styling */
     div.stButton > button[aria-label="Generate"] {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         width: 100%; 
         height: 100%;
-        min-height: 45px; /* Match input height roughly */
+        min-height: 45px;
         padding: 0;
-        color: transparent !important; /* Hide text */
+        color: transparent !important;
     }
 
-    /* Inject SVG icon using mask-image for currentColor support */
     div.stButton > button[aria-label="Generate"]::before {
         content: "";
         width: 24px;
@@ -176,78 +81,8 @@ st.markdown("""
         mask-repeat: no-repeat;
         -webkit-mask-repeat: no-repeat;
     }
-
-    /* --- CUSTOM FEEDBACK SUCCESS BOX --- */
-    .success-box {
-        background-color: #dcfce7; /* Green-100 */
-        border: 1px solid #86efac; /* Green-300 */
-        color: #166534; /* Green-800 */
-        padding: 16px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-        position: relative;
-        font-weight: 500;
-    }
-
-    /* --- POSITIONING THE DISMISS BUTTON (SUCCESS) --- */
-    /* Target the button with label '✖' (Heavy Multiplication X) */
-    button[aria-label="✖"] {
-        position: absolute !important;
-        top: -55px !important; /* Pull it up into the box (adjust based on box height) */
-        right: 10px !important;
-        background: transparent !important;
-        border: none !important;
-        color: #166534 !important;
-        font-size: 1.2rem !important;
-        z-index: 100;
-    }
-    button[aria-label="✖"]:hover {
-        color: #b91c1c !important;
-        background-color: rgba(255,255,255,0.5) !important;
-    }
-
-    /* --- POSITIONING THE CARD CLOSE BUTTON --- */
-    /* Target the button with label '✕' (Multiplication X) */
-    button[aria-label="✕"] {
-        border: none !important;
-        background: transparent !important;
-        color: #64748b !important;
-        font-size: 1.2rem !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        display: flex;
-        justify-content: flex-end;
-    }
-    button[aria-label="✕"]:hover {
-        color: #ef4444 !important;
-        background: transparent !important;
-    }
-    
-    /* Force right alignment for the card close button container */
-    div[data-testid="stHorizontalBlock"] > div:nth-child(2) {
-        display: flex;
-        justify-content: flex-end;
-    }
-
 </style>
 """, unsafe_allow_html=True)
-
-# --- API KEY LOGIC ---
-api_key = None
-# Try to get API key from secrets first
-try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-except Exception:
-    pass
-
-# If not in secrets, try environment variable (loaded by dotenv)
-if not api_key:
-    api_key = os.getenv("GOOGLE_API_KEY")
-
-if not api_key:
-    st.sidebar.header("Settings")
-    api_key = st.sidebar.text_input("Enter Google Gemini API Key", type="password")
 
 # --- HELPER FUNCTIONS ---
 
@@ -262,9 +97,6 @@ def get_gspread_client():
         try:
             if 'gspread' in st.secrets:
                 return gspread.service_account_from_dict(st.secrets['gspread'])
-
-            if "GSPREAD_AUTH" in st.secrets:
-                return gspread.service_account_from_dict(st.secrets["GSPREAD_AUTH"])
         except Exception:
             pass
         
@@ -285,23 +117,12 @@ def submit_feedback(rating, comment):
     """
     client = get_gspread_client()
     if not client:
-        return
-
+        return False
     try:
         # Open the spreadsheet
-        sheet_name = None
-        
-        # 1. Try Secrets
-        try:
-            sheet_name = st.secrets.get("SHEET_NAME")
-        except Exception:
-            pass
-        
-        # 2. Try Environment Variable if not in secrets
-        if not sheet_name:
-            sheet_name = os.getenv("SHEET_NAME")
+        sheet_name = os.getenv("SHEET_NAME")
             
-        # 3. Fallback default
+        # Fallback default
         if not sheet_name:
             sheet_name = "LearnFromPDF_Feedback"
         
@@ -314,8 +135,7 @@ def submit_feedback(rating, comment):
                 sh = client.create(sheet_name)
                 sh.share(client.auth.service_account_email, perm_type='user', role='owner')
              except:
-                 st.error(f"Spreadsheet '{sheet_name}' not found and could not be created.")
-                 return
+                 return False
 
         worksheet = sh.get_worksheet(0)
 
@@ -332,7 +152,6 @@ def submit_feedback(rating, comment):
         return True
         
     except Exception as e:
-        st.error(f"Error saving feedback: {e}")
         return False
 
 def extract_text_from_pdf(pdf_file):
@@ -352,41 +171,88 @@ def extract_text_from_pdf(pdf_file):
 def generate_study_material(text_content, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
 
         prompt = f"""
-        You are an expert educational AI. Analyze the text and produce structured study content.
+        You must generate all output text in the same language detected in the "TEXT TO ANALYZE" section.
+        
+        You are an expert educational AI. Analyze the provided text and extract 4 to 8 distinct, key concepts.
         
         TEXT TO ANALYZE:
-        {text_content[:30000]}
+        {text_content[:50000]}
         
-        OUTPUT FORMAT (JSON ONLY):
-        {{
-            "summary_points": ["Point 1", "Point 2", "Point 3", "Point 4"],
-            "flashcards": [
-                {{"question": "Question?", "answer": "Answer"}}
-            ],
-            "quiz": [
-                {{"question": "Question?", "options": ["A", "B", "C", "D"], "correct_answer": "A"}}
-            ]
-        }}
+        OUTPUT FORMAT (JSON ARRAY):
+        [
+            {{
+                "title": "Concept Title",
+                "summary": "A 1-3 sentence summary of the concept."
+            }},
+            ...
+        ]
         """
         
         response = model.generate_content(prompt)
-        clean_text = response.text.replace("```json", "").replace("```", "")
-        return json.loads(clean_text)
+        return json.loads(response.text)
     except Exception as e:
         st.error(f"AI Error: {e}")
         return None
 
-def process_generation(uploaded_file, status_container=None):
+async def generate_chat_response(concept_title, concept_summary, user_prompt, pdf_text, api_key):
+    """
+    Handles chat for a specific concept with history management.
+    """
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Get history for this concept
+        history = st.session_state['chat_histories'].get(concept_title, [])
+        
+        # Initialize if empty
+        if not history:
+            system_instruction = f"""
+            You are a helpful, Socratic tutor specializing in the concept: '{concept_title}'.
+            
+            Concept Summary: {concept_summary}
+            
+            Full Context (Reference Only):
+            {pdf_text[:30000]}
+            
+            Your goal is to help the user understand '{concept_title}' deeply. Answer questions, provide examples, and ask guiding questions.
+            Keep responses concise and conversational.
+            """
+            history.append({"role": "user", "parts": [system_instruction]})
+        
+        # Summarization/Pruning if history is too long (keep system prompt + last few)
+        if len(history) > 10:
+            # Simple pruning for now to save tokens, keeping system prompt and last 4
+            history = [history[0]] + history[-4:]
+            
+        # Add user message
+        history.append({"role": "user", "parts": [user_prompt]})
+        
+        # Generate response
+        response = await model.generate_content_async(history)
+        
+        # Add model response
+        history.append({"role": "model", "parts": [response.text]})
+        
+        # Update state
+        st.session_state['chat_histories'][concept_title] = history
+        
+        return response.text
+        
+    except Exception as e:
+        return f"Error: {e}"
+
+def process_generation(uploaded_file, api_key, status_container=None):
     """
     Handles the generation logic for PDF files.
     """
     msg_container = status_container if status_container else st
 
     if not api_key:
-        msg_container.warning("API Key missing. Please enter it in the sidebar.")
+        msg_container.warning("API Key missing. Please enter it above.")
         return
 
     if not uploaded_file:
@@ -395,7 +261,7 @@ def process_generation(uploaded_file, status_container=None):
 
     # Execute spinner and messages within the container context
     with msg_container:
-        with st.spinner("✨ Reading PDF & Generating content..."):
+        with st.spinner("Reading PDF & Generating content..."):
             # 1. Extract Text
             text_to_process = extract_text_from_pdf(uploaded_file)
             
@@ -409,15 +275,23 @@ def process_generation(uploaded_file, status_container=None):
             data = generate_study_material(text_to_process, api_key)
             if data:
                 st.session_state['generated_data'] = data
-                st.session_state['show_feedback'] = True # Enable feedback on success
-                st.session_state['feedback_submitted'] = False # Reset submission state
-                st.rerun() # Rerun to display results
+                st.session_state['pdf_text'] = text_to_process
+                st.session_state['chat_histories'] = {}
+                st.session_state['show_feedback'] = True
+                st.session_state['feedback_submitted'] = False
+                st.rerun()
 
 # --- MAIN APP UI ---
 
-# Hero Section
+# Header Layout (Centered Title Only)
 st.markdown('<div class="hero-title">Learn From PDF</div>', unsafe_allow_html=True)
-st.markdown('<div class="hero-subtitle">AI Study Kit: Instantly convert your PDF lecture slides and papers into summaries, flashcards, and quizzes.</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-subtitle">AI Study Kit: Instantly convert your PDF lecture slides and papers into summaries.</div>', unsafe_allow_html=True)
+
+# API Key Handling
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    st.warning("⚠️ Google Gemini API Key is missing. Please enter it below to proceed.")
+    api_key = st.text_input("Enter Google Gemini API Key", type="password", key="api_key_runtime_input")
 
 # --- SESSION STATE INITIALIZATION ---
 if 'study_material' not in st.session_state:
@@ -428,6 +302,10 @@ if 'show_feedback' not in st.session_state:
     st.session_state['show_feedback'] = False
 if 'feedback_submitted' not in st.session_state:
     st.session_state['feedback_submitted'] = False
+if 'chat_histories' not in st.session_state:
+    st.session_state['chat_histories'] = {}
+if 'pdf_text' not in st.session_state:
+    st.session_state['pdf_text'] = ""
 
 # --- WIDGETS ---
 # Centered Card Container for Inputs
@@ -436,7 +314,6 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     with st.container(border=True):
         # Single Row: Uploader + Button
-        # Adjust column ratios to make button sit nicely next to uploader
         u_col1, u_col2 = st.columns([5, 1])
         
         with u_col1:
@@ -456,156 +333,87 @@ with col2:
         status_container = st.container()
 
         if generate_clicked:
-            process_generation(uploaded_file, status_container=status_container)
+            process_generation(uploaded_file, api_key, status_container=status_container)
 
 # --- DISPLAY RESULTS ---
 data = st.session_state.get('generated_data')
 if data:
-    st.markdown("<br>", unsafe_allow_html=True) # Spacer
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### Study Concepts")
     
-    # 1. Summary Cards
-    st.markdown("### 📌 Key Concepts")
-    summary_points = data.get("summary_points", [])
-    
-    # Display in a grid of cards
-    for i in range(0, len(summary_points), 2):
-        cols = st.columns(2)
-        # Card 1
-        with cols[0]:
-            st.markdown(f"""
-            <div class="summary-card">
-                <span class="summary-number">#{i+1}</span>
-                {summary_points[i]}
-            </div>
-            """, unsafe_allow_html=True)
+    # Iterate over concepts
+    for i, concept in enumerate(data):
+        title = concept.get('title', f"Concept {i+1}")
+        summary = concept.get('summary', "No summary available.")
         
-        # Card 2 (if exists)
-        if i + 1 < len(summary_points):
-            with cols[1]:
-                st.markdown(f"""
-                <div class="summary-card">
-                    <span class="summary-number">#{i+2}</span>
-                    {summary_points[i+1]}
-                </div>
-                """, unsafe_allow_html=True)
-    
-    # 2. Flashcards
-    st.markdown("---")
-    st.markdown("### 🗂️ Flashcards")
-    flashcards = data.get("flashcards", [])
-    
-    # Display in a grid of cards (2 columns)
-    for i in range(0, len(flashcards), 2):
-        cols = st.columns(2)
-        
-        # Card 1
-        with cols[0]:
-            with st.container(border=True):
-                st.markdown(f"**Q: {flashcards[i]['question']}**")
-                with st.expander("Reveal Answer"):
-                    st.write(flashcards[i]['answer'])
-        
-        # Card 2 (if exists)
-        if i + 1 < len(flashcards):
-            with cols[1]:
-                with st.container(border=True):
-                    st.markdown(f"**Q: {flashcards[i+1]['question']}**")
-                    with st.expander("Reveal Answer"):
-                        st.write(flashcards[i+1]['answer'])
-    
-    # 3. Quiz
-    st.markdown("---")
-    st.markdown("### 📝 Self-Test")
-    
-    quiz_data = data.get("quiz", [])
-    for i, q in enumerate(quiz_data):
-        # Card-based layout for each question
-        with st.container(border=True):
-            st.markdown(f"#### {i+1}. {q['question']}")
-            st.markdown("<br>", unsafe_allow_html=True) # Vertical spacing
+        # Concept Card Style
+        with st.expander(f"**{i+1}. {title}**", expanded=False):
+            st.markdown(f"_{summary}_")
+            st.markdown("---")
             
-            # Unique key for each radio button to track state
-            user_answer = st.radio(
-                "Choose one:", 
-                q['options'], 
-                key=f"quiz_q_{i}", 
-                index=None, 
-                label_visibility="collapsed"
-            )
+            # Chat Interface for this concept
+            st.markdown("#### Discuss this concept")
             
-            # Immediate feedback
-            if user_answer:
-                # Check if the selected option starts with the correct letter (e.g., "A")
-                if user_answer.startswith(q['correct_answer']):
-                    st.success(f"✅ Correct! The answer is **{user_answer}**.")
-                else:
-                    # Find the full text of the correct answer
-                    correct_option_text = next((opt for opt in q['options'] if opt.startswith(q['correct_answer'])), q['correct_answer'])
-                    st.error(f"❌ Incorrect. The correct answer is **{correct_option_text}**.")
-        
-        # Margin between cards
-        st.markdown("<br>", unsafe_allow_html=True)
+            # Container for chat history
+            chat_container = st.container()
+            
+            # Get history
+            history = st.session_state['chat_histories'].get(title, [])
+            
+            # Display history (skip system prompt)
+            with chat_container:
+                for msg in history:
+                    if msg['role'] == 'user' and "You are a helpful" in msg['parts'][0]:
+                        continue # Skip system prompt
+                    
+                    role_display = "user" if msg['role'] == 'user' else "assistant"
+                    with st.chat_message(role_display):
+                        st.write(msg['parts'][0])
+            
+            # Chat Input
+            if prompt := st.chat_input(f"Ask about {title}...", key=f"chat_input_{i}"):
+                # Add user message immediately to UI
+                with chat_container:
+                    with st.chat_message("user"):
+                        st.write(prompt)
+                
+                # Generate response
+                with st.spinner("Thinking..."):
+                    response_text = asyncio.run(generate_chat_response(
+                        title, 
+                        summary, 
+                        prompt, 
+                        st.session_state['pdf_text'],
+                        api_key
+                    ))
+                
+                # Rerun to update history display properly
+                st.rerun()
 
 # --- FEEDBACK SECTION ---
-# Only render if feedback is active
 if st.session_state.get('show_feedback'):
-    
-    # Case 1: Feedback already submitted -> Show Custom Success Message
+    st.markdown("---")
     if st.session_state.get('feedback_submitted'):
-        st.markdown("---")
-        
-        # Custom HTML Success Box
-        st.markdown(
-            """
-            <div class="success-box">
-                <span>Thank you for your feedback!</span>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-
-    # Case 2: Feedback NOT submitted -> Show Form
+         st.success("Thank you for your feedback!")
     else:
-        st.markdown("---")
-        
-        # Placeholder for smooth loading/hiding
-        feedback_placeholder = st.empty()
-        
-        with feedback_placeholder.container():
-            with st.container(border=True):
-                # Header and Close Button
-                # Use a very small second column to force right alignment
-                col_title, col_close = st.columns([1, 0.05])
-                with col_title:
-                    st.subheader("⭐ Share Your Feedback")
-                with col_close:
-                    # Use standard '✕' (Multiplication X) for this button
-                    if st.button("✕", key="close_feedback"):
-                        st.session_state['show_feedback'] = False
-                        st.rerun()
+        with st.expander("Share Feedback"):
+            # Placeholder for feedback submission status
+            feedback_status = st.empty()
+            
+            with st.form("feedback_form"):
+                rating = st.slider("Rating", 1, 5, 5)
+                comment = st.text_area("Comments")
+                submitted = st.form_submit_button("Submit")
                 
-                # Feedback Form
-                with st.form("feedback_form"):
-                    rating_options = ['5 stars ⭐⭐⭐⭐⭐', '4 stars ⭐⭐⭐⭐', '3 stars ⭐⭐⭐', '2 stars ⭐⭐', '1 star ⭐']
-                    rating_selection = st.selectbox("Rate your experience", options=rating_options)
+                if submitted:
+                    # Show loading message
+                    with feedback_status:
+                        with st.spinner("Submitting your feedback..."):
+                            # Submit feedback
+                            success = submit_feedback(rating, comment)
                     
-                    comment = st.text_area("Additional comments (optional):", height=100)
-                    
-                    # Standard submit button (no icon styling)
-                    submitted = st.form_submit_button("Submit Feedback", type="primary")
-                    
-                    if submitted:
-                        # Extract numeric rating
-                        rating_value = int(rating_selection.split(" ")[0])
-                        
-                        # Hide the form immediately by clearing the placeholder
-                        feedback_placeholder.empty()
-                        
-                        # Show spinner in the now-empty placeholder
-                        with feedback_placeholder.container():
-                            with st.spinner("Saving your feedback..."):
-                                success = submit_feedback(rating_value, comment)
-                        
-                        if success:
-                            st.session_state['feedback_submitted'] = True
-                            st.rerun()
+                    if success:
+                        st.session_state['feedback_submitted'] = True
+                        st.rerun()
+                    else:
+                        feedback_status.error("Failed to submit feedback. Please try again.")
