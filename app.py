@@ -220,13 +220,55 @@ async def generate_chat_response(concept_title, concept_summary, user_prompt, pd
             
             Your goal is to help the user understand '{concept_title}' deeply. Answer questions, provide examples, and ask guiding questions.
             Keep responses concise and conversational.
+
+            **STRICT RULE:** When asking guiding questions, base them *only* on the current thread of the conversation. Do not introduce new topics or terms from the 'Full Context' that the user has not explicitly asked about or referenced.
             """
             history.append({"role": "user", "parts": [system_instruction]})
         
-        # Summarization/Pruning if history is too long (keep system prompt + last few)
+        # Advanced History Pruning with Summarization
         if len(history) > 10:
-            # Simple pruning for now to save tokens, keeping system prompt and last 4
-            history = [history[0]] + history[-4:]
+            try:
+                # Identify messages to summarize (from index 1 to the last 5 messages)
+                messages_to_summarize = history[1:-5]
+                
+                # Create summarization prompt
+                conversation_text = ""
+                for msg in messages_to_summarize:
+                    role = msg.get('role', 'unknown')
+                    content = msg.get('parts', [''])[0]
+                    conversation_text += f"{role.upper()}: {content}\n\n"
+                
+                summarization_prompt = f"""
+                You are analyzing a conversation about the concept: '{concept_title}'.
+                
+                Condense the following conversation into a single, comprehensive summary.
+                Focus on key points discussed, questions asked, and concepts explained.
+                Keep it concise (3-5 sentences) but preserve important context.
+                
+                CONVERSATION TO SUMMARIZE:
+                {conversation_text}
+                
+                Provide ONLY the summary text, no preamble.
+                """
+                
+                # Execute synchronous summarization call
+                summary_model = genai.GenerativeModel('gemini-2.5-flash')
+                summary_response = summary_model.generate_content(summarization_prompt)
+                summary_text = summary_response.text
+                
+                # Create new summary message under 'model' role
+                summary_message = {
+                    "role": "model",
+                    "parts": [f"[Context Summary: conversation so far]\n\n{summary_text}"]
+                }
+                
+                # Rebuild history: [system_instruction] + [summary_message] + [last_5_messages]
+                history = [history[0]] + [summary_message] + history[-5:]
+                
+            except Exception as summarization_error:
+                # Fallback to simple pruning if summarization fails
+                print(f"Summarization failed: {summarization_error}. Using simple pruning.")
+                history = [history[0]] + history[-5:]
             
         # Add user message
         history.append({"role": "user", "parts": [user_prompt]})
@@ -335,85 +377,88 @@ with col2:
         if generate_clicked:
             process_generation(uploaded_file, api_key, status_container=status_container)
 
-# --- DISPLAY RESULTS ---
-data = st.session_state.get('generated_data')
-if data:
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### Study Concepts")
-    
-    # Iterate over concepts
-    for i, concept in enumerate(data):
-        title = concept.get('title', f"Concept {i+1}")
-        summary = concept.get('summary', "No summary available.")
+    # --- DISPLAY RESULTS ---
+    data = st.session_state.get('generated_data')
+    if data:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### Study Concepts")
         
-        # Concept Card Style
-        with st.expander(f"**{i+1}. {title}**", expanded=False):
-            st.markdown(f"_{summary}_")
-            st.markdown("---")
+        # Iterate over concepts
+        for i, concept in enumerate(data):
+            title = concept.get('title', f"Concept {i+1}")
+            summary = concept.get('summary', "No summary available.")
             
-            # Chat Interface for this concept
-            st.markdown("#### Discuss this concept")
-            
-            # Container for chat history
-            chat_container = st.container()
-            
-            # Get history
-            history = st.session_state['chat_histories'].get(title, [])
-            
-            # Display history (skip system prompt)
-            with chat_container:
-                for msg in history:
-                    if msg['role'] == 'user' and "You are a helpful" in msg['parts'][0]:
-                        continue # Skip system prompt
-                    
-                    role_display = "user" if msg['role'] == 'user' else "assistant"
-                    with st.chat_message(role_display):
-                        st.write(msg['parts'][0])
-            
-            # Chat Input
-            if prompt := st.chat_input(f"Ask about {title}...", key=f"chat_input_{i}"):
-                # Add user message immediately to UI
+            # Concept Card Style
+            with st.expander(f"**{i+1}. {title}**", expanded=False):
+                st.markdown(f"_{summary}_")
+                st.markdown("---")
+                
+                # Chat Interface for this concept
+                st.markdown("#### Discuss this concept")
+                
+                # Container for chat history
+                chat_container = st.container()
+                
+                # Get history
+                history = st.session_state['chat_histories'].get(title, [])
+                
+                # Display history (skip system prompt)
                 with chat_container:
-                    with st.chat_message("user"):
-                        st.write(prompt)
+                    for msg in history:
+                        if msg['role'] == 'user' and "You are a helpful" in msg['parts'][0]:
+                            continue # Skip system prompt
+                        
+                        if msg['role'] == 'model' and "[Context Summary: conversation so far]" in msg['parts'][0]:
+                            continue # Skip system prompt
+                        
+                        role_display = "user" if msg['role'] == 'user' else "assistant"
+                        with st.chat_message(role_display):
+                            st.write(msg['parts'][0])
                 
-                # Generate response
-                with st.spinner("Thinking..."):
-                    response_text = asyncio.run(generate_chat_response(
-                        title, 
-                        summary, 
-                        prompt, 
-                        st.session_state['pdf_text'],
-                        api_key
-                    ))
-                
-                # Rerun to update history display properly
-                st.rerun()
-
-# --- FEEDBACK SECTION ---
-if st.session_state.get('show_feedback'):
-    st.markdown("---")
-    if st.session_state.get('feedback_submitted'):
-         st.success("Thank you for your feedback!")
-    else:
-        with st.expander("Share Feedback"):
-            # Placeholder for feedback submission status
-            feedback_status = st.empty()
-            
-            with st.form("feedback_form"):
-                rating = st.slider("Rating", 1, 5, 5)
-                comment = st.text_area("Comments")
-                submitted = st.form_submit_button("Submit")
-                
-                if submitted:
-                    # Show loading message
-                    with feedback_status:
-                        with st.spinner("Submitting your feedback..."):
-                            # Submit feedback
-                            success = submit_feedback(rating, comment)
+                # Chat Input
+                if prompt := st.chat_input(f"Ask about {title}...", key=f"chat_input_{i}"):
+                    # Add user message immediately to UI
+                    with chat_container:
+                        with st.chat_message("user"):
+                            st.write(prompt)
                     
-                    if success:
-                        st.session_state['feedback_submitted'] = True
-                        st.rerun()
-                    else:
-                        feedback_status.error("Failed to submit feedback. Please try again.")
+                    # Generate response
+                    with st.spinner("Thinking..."):
+                        response_text = asyncio.run(generate_chat_response(
+                            title, 
+                            summary, 
+                            prompt, 
+                            st.session_state['pdf_text'],
+                            api_key
+                        ))
+                    
+                    # Rerun to update history display properly
+                    st.rerun()
+
+    # --- FEEDBACK SECTION ---
+    if st.session_state.get('show_feedback'):
+        st.markdown("---")
+        if st.session_state.get('feedback_submitted'):
+            st.success("Thank you for your feedback!")
+        else:
+            with st.expander("Share Feedback"):
+                # Placeholder for feedback submission status
+                feedback_status = st.empty()
+                
+                with st.form("feedback_form"):
+                    rating = st.slider("Rating", 1, 5, 5)
+                    comment = st.text_area("Comments")
+                    submitted = st.form_submit_button("Submit")
+                    
+                    if submitted:
+                        # Show loading message
+                        with feedback_status:
+                            with st.spinner("Submitting your feedback..."):
+                                # Submit feedback
+                                success = submit_feedback(rating, comment)
+                        
+                        if success:
+                            st.session_state['feedback_submitted'] = True
+                            st.rerun()
+                        else:
+                            feedback_status.error("Failed to submit feedback. Please try again.")
